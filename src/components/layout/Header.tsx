@@ -5,14 +5,13 @@ import { Logo } from '../ui/Logo'
 import { CATEGORIES } from '../../config/site'
 import { CommandPalette } from './CommandPalette'
 import { DynamicIcon } from '../ui/DynamicIcon'
+import { useTheme } from '../../context/ThemeContext'
 
 export const Header: React.FC = () => {
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false)
-  const [isDark, setIsDark] = useState(() => {
-    return document.documentElement.classList.contains('dark')
-  })
+  const { isDark, toggleTheme } = useTheme()
   const location = useLocation()
 
   // Close menus on route change
@@ -32,16 +31,6 @@ export const Header: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
-
-  const toggleTheme = () => {
-    const willBeDark = !isDark
-    setIsDark(willBeDark)
-    if (willBeDark) {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
-  }
 
   return (
     <>
@@ -167,10 +156,15 @@ export const Header: React.FC = () => {
             <button
               type="button"
               onClick={toggleTheme}
-              aria-label="Toggle color theme"
-              className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
+              aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="p-2 sm:p-2.5 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center border border-slate-200/80 dark:border-slate-800"
             >
-              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {isDark ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-slate-700" />
+              )}
             </button>
 
             {/* Mobile menu toggle */}
@@ -212,6 +206,22 @@ export const Header: React.FC = () => {
               ))}
             </div>
             <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-1 text-xs">
+              {/* Mobile Drawer Theme Switcher */}
+              <button
+                type="button"
+                onClick={toggleTheme}
+                aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                className="p-2.5 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900 min-h-[44px] flex items-center justify-between cursor-pointer w-full text-left"
+              >
+                <span className="flex items-center gap-2 font-medium">
+                  {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-blue-600" />}
+                  <span>{isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}</span>
+                </span>
+                <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                  {isDark ? 'Dark Mode' : 'Light Mode'}
+                </span>
+              </button>
+
               <Link to="/blog" className="p-2.5 text-blue-600 dark:text-blue-400 font-semibold hover:text-blue-700 min-h-[40px] flex items-center">
                 Blog &amp; Practical Guides
               </Link>

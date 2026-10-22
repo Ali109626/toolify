@@ -125,15 +125,35 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
           {query && (
             <button
               type="button"
-              onClick={() => setQuery('')}
-              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation()
+                setQuery('')
+                inputRef.current?.focus()
+              }}
+              aria-label="Clear query"
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer mr-1"
             >
               <X className="w-4 h-4" />
             </button>
           )}
-          <span className="text-[10px] font-mono text-slate-400 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 ml-2 select-none shrink-0">
+
+          {/* Desktop ESC shortcut indicator */}
+          <span className="hidden sm:inline-flex items-center text-[10px] font-mono text-slate-400 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 ml-2 select-none shrink-0">
             ESC
           </span>
+
+          {/* Mobile Close Button (at least 44x44px touch target) */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onClose()
+            }}
+            aria-label="Close search"
+            className="sm:hidden min-w-[44px] min-h-[44px] -mr-1.5 ml-1 rounded-xl flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Results List */}

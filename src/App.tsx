@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { ToastProvider } from './components/ui/Toast'
+import { ThemeProvider } from './context/ThemeContext'
 import { Header } from './components/layout/Header'
 import { Footer } from './components/layout/Footer'
 import { Home } from './pages/Home'
@@ -27,10 +28,11 @@ function ScrollToTop() {
 
 export function App() {
   return (
-    <ToastProvider>
-      <BrowserRouter>
-        <ScrollToTop />
-        <div className="min-h-screen flex flex-col bg-[#FBFBF9] dark:bg-[#0B0F19] text-[#111827] dark:text-[#F9FAFB] transition-colors duration-150">
+    <ThemeProvider>
+      <ToastProvider>
+        <BrowserRouter>
+          <ScrollToTop />
+          <div className="min-h-screen flex flex-col bg-[#FBFBF9] dark:bg-[#0B0F19] text-[#111827] dark:text-[#F9FAFB] transition-colors duration-150">
           <Header />
           <main className="flex-1">
             <Routes>
@@ -53,6 +55,7 @@ export function App() {
         </div>
       </BrowserRouter>
     </ToastProvider>
+  </ThemeProvider>
   )
 }
 

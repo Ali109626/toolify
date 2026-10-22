@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import '@testing-library/jest-dom'
+import { ThemeProvider } from '../context/ThemeContext'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ToastProvider } from '../components/ui/Toast'
@@ -102,6 +103,39 @@ describe('CommandPalette (Search Modal)', () => {
 
     const toolResult = screen.getByText('Image Compressor')
     fireEvent.click(toolResult)
+    expect(handleClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders a mobile close button with accessible label "Close search" and clicking it closes the modal', () => {
+    const handleClose = vi.fn()
+    render(
+      <MemoryRouter>
+        <CommandPalette isOpen={true} onClose={handleClose} />
+      </MemoryRouter>
+    )
+
+    const closeButton = screen.getByRole('button', { name: /Close search/i })
+    expect(closeButton).toBeInTheDocument()
+    expect(closeButton).toHaveAttribute('aria-label', 'Close search')
+
+    fireEvent.click(closeButton)
+    expect(handleClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops click propagation when clicking the mobile close button', () => {
+    const handleClose = vi.fn()
+    render(
+      <MemoryRouter>
+        <CommandPalette isOpen={true} onClose={handleClose} />
+      </MemoryRouter>
+    )
+
+    const closeButton = screen.getByRole('button', { name: /Close search/i })
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true })
+    const stopPropagationSpy = vi.spyOn(clickEvent, 'stopPropagation')
+
+    closeButton.dispatchEvent(clickEvent)
+    expect(stopPropagationSpy).toHaveBeenCalled()
     expect(handleClose).toHaveBeenCalledTimes(1)
   })
 })
@@ -358,3 +392,41 @@ describe('CategoryBadge Component', () => {
     expect(prodBadge).toHaveClass('text-[#5B21B6]')
   })
 })
+
+describe('Dark / Light Theme Toggle', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    document.documentElement.classList.remove('dark')
+  })
+
+  it('toggles between dark and light mode, updates root element class, and persists to localStorage', () => {
+    render(
+      <ThemeProvider>
+        <MemoryRouter>
+          <Header />
+        </MemoryRouter>
+      </ThemeProvider>
+    )
+
+    // Initial theme defaults to dark mode
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+
+    // The button shows action to switch to light mode
+    const toggleBtn = screen.getByRole('button', { name: /Switch to light mode/i })
+    expect(toggleBtn).toBeInTheDocument()
+
+    // Click toggle button -> switches to light mode
+    fireEvent.click(toggleBtn)
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+    expect(localStorage.getItem('toolify_theme')).toBe('light')
+    expect(screen.getByRole('button', { name: /Switch to dark mode/i })).toBeInTheDocument()
+
+    // Click again -> switches back to dark mode
+    const switchDarkBtn = screen.getByRole('button', { name: /Switch to dark mode/i })
+    fireEvent.click(switchDarkBtn)
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    expect(localStorage.getItem('toolify_theme')).toBe('dark')
+    expect(screen.getByRole('button', { name: /Switch to light mode/i })).toBeInTheDocument()
+  })
+})
+

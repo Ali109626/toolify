@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Toolify — Free, Fast &amp; Private Online Tools</title>
+
+    <!-- Theme Initialization to Prevent Flash of Wrong Theme -->
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('toolify_theme');
+          var systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var isDark = saved ? saved === 'dark' : (systemDark !== false);
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
     <meta name="description" content="A curated suite of fast, free, private online tools for images, PDFs, text, developer workflows, and calculations. 100% processed in your browser." />
     <meta name="keywords" content="free online tools, pdf merger, image compressor, json formatter, word counter, client-side tools, private tools" />
     <meta name="theme-color" content="#1D4ED8" />
