@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import '@testing-library/jest-dom'
 import { ThemeProvider } from '../context/ThemeContext'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { ToastProvider } from '../components/ui/Toast'
+import { ToastProvider, useToast } from '../components/ui/Toast'
 import { Header } from '../components/layout/Header'
 import { CommandPalette } from '../components/layout/CommandPalette'
 import { Home } from '../pages/Home'
@@ -15,6 +15,8 @@ import { PercentageCalculator } from '../tools/calc/PercentageCalculator'
 import { BlogList } from '../pages/BlogList'
 import { BlogPostPage } from '../pages/BlogPostPage'
 import { CategoryBadge } from '../components/blog/CategoryBadge'
+import { ImageCompressor } from '../tools/image/ImageCompressor'
+import * as imageLib from '../lib/image'
 import { Routes, Route } from 'react-router-dom'
 
 describe('Header & Navigation Component', () => {
@@ -429,4 +431,259 @@ describe('Dark / Light Theme Toggle', () => {
     expect(screen.getByRole('button', { name: /Switch to light mode/i })).toBeInTheDocument()
   })
 })
+
+describe('Toast Notification System', () => {
+  it('allows a maximum of ONE visible success toast for repeated success operations', () => {
+    function TestComponent() {
+      const { showToast } = useToast()
+      return (
+        <div>
+          <button onClick={() => showToast('Compression complete', 'Saved 40% file size', 'success')}>
+            Compress 1
+          </button>
+          <button onClick={() => showToast('Compression complete', 'Saved 60% file size', 'success')}>
+            Compress 2
+          </button>
+        </div>
+      )
+    }
+
+    render(
+      <ToastProvider>
+        <TestComponent />
+      </ToastProvider>
+    )
+
+    fireEvent.click(screen.getByText('Compress 1'))
+    expect(screen.getByText('Saved 40% file size')).toBeInTheDocument()
+    expect(screen.getAllByText('Compression complete')).toHaveLength(1)
+
+    // Trigger second compression
+    fireEvent.click(screen.getByText('Compress 2'))
+    // Should update/replace existing success toast: only ONE visible success toast
+    expect(screen.getAllByText('Compression complete')).toHaveLength(1)
+    expect(screen.getByText('Saved 60% file size')).toBeInTheDocument()
+    expect(screen.queryByText('Saved 40% file size')).not.toBeInTheDocument()
+  })
+
+  it('immediately dismisses notification when close button is clicked', () => {
+    function TestComponent() {
+      const { showToast } = useToast()
+      return (
+        <button onClick={() => showToast('Compression complete', 'Saved 50% file size', 'success')}>
+          Compress
+        </button>
+      )
+    }
+
+    render(
+      <ToastProvider>
+        <TestComponent />
+      </ToastProvider>
+    )
+
+    fireEvent.click(screen.getByText('Compress'))
+    expect(screen.getByText('Saved 50% file size')).toBeInTheDocument()
+
+    const closeBtn = screen.getByRole('button', { name: /Dismiss notification/i })
+    fireEvent.click(closeBtn)
+
+    expect(screen.queryByText('Saved 50% file size')).not.toBeInTheDocument()
+  })
+
+  it('keeps error notifications visible and distinct from success toasts', () => {
+    function TestComponent() {
+      const { showToast } = useToast()
+      return (
+        <div>
+          <button onClick={() => showToast('Compression complete', 'Saved 40%', 'success')}>
+            Success
+          </button>
+          <button onClick={() => showToast('Compression failed', 'Invalid format', 'error')}>
+            Error
+          </button>
+        </div>
+      )
+    }
+
+    render(
+      <ToastProvider>
+        <TestComponent />
+      </ToastProvider>
+    )
+
+    fireEvent.click(screen.getByText('Success'))
+    fireEvent.click(screen.getByText('Error'))
+
+    expect(screen.getByText('Saved 40%')).toBeInTheDocument()
+    expect(screen.getByText('Invalid format')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+  })
+
+  it('automatically dismisses success notifications after duration', () => {
+    vi.useFakeTimers()
+    function TestComponent() {
+      const { showToast } = useToast()
+      return (
+        <button onClick={() => showToast('Compression complete', 'Saved 35% file size', 'success')}>
+          Compress
+        </button>
+      )
+    }
+
+    render(
+      <ToastProvider>
+        <TestComponent />
+      </ToastProvider>
+    )
+
+    fireEvent.click(screen.getByText('Compress'))
+    expect(screen.getByText('Saved 35% file size')).toBeInTheDocument()
+
+    // Fast-forward by 2000ms (toast should still be visible)
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+    expect(screen.getByText('Saved 35% file size')).toBeInTheDocument()
+
+    // Fast-forward past 2800ms
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(screen.queryByText('Saved 35% file size')).not.toBeInTheDocument()
+    vi.useRealTimers()
+  })
+
+  it('deduplicates and updates toast in place when an explicit id is used', () => {
+    function TestComponent() {
+      const { showToast } = useToast()
+      return (
+        <div>
+          <button
+            onClick={() =>
+              showToast('Compression complete', 'Result pass 1', 'success', {
+                id: 'custom-operation',
+              })
+            }
+          >
+            Trigger 1
+          </button>
+          <button
+            onClick={() =>
+              showToast('Compression complete', 'Result pass 2', 'success', {
+                id: 'custom-operation',
+              })
+            }
+          >
+            Trigger 2
+          </button>
+        </div>
+      )
+    }
+
+    render(
+      <ToastProvider>
+        <TestComponent />
+      </ToastProvider>
+    )
+
+    fireEvent.click(screen.getByText('Trigger 1'))
+    expect(screen.getByText('Result pass 1')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Trigger 2'))
+    expect(screen.getByText('Result pass 2')).toBeInTheDocument()
+    expect(screen.queryByText('Result pass 1')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Compression complete')).toHaveLength(1)
+  })
+})
+
+describe('ImageCompressor Notification & Stacking Behavior', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    vi.spyOn(imageLib, 'compressImage').mockImplementation(async (file, quality) => {
+      return {
+        blob: new Blob(['mock-data']),
+        url: 'blob:http://localhost/mock-compressed',
+        width: 800,
+        height: 600,
+        size: Math.round(file.size * (quality || 0.75)),
+      }
+    })
+  })
+
+  it('displays only one success toast upon compression and updates it on repeated re-compress without stacking', async () => {
+    render(
+      <ToastProvider>
+        <ImageCompressor />
+      </ToastProvider>
+    )
+
+    const file = new File(['mock image file bytes of 1000 length'], 'sample.png', {
+      type: 'image/png',
+    })
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    const toast = await screen.findByText('Compression complete')
+    expect(toast).toBeInTheDocument()
+    expect(screen.getAllByText('Compression complete')).toHaveLength(1)
+
+    // Repeated compressions via Re-compress button
+    const recompressBtn = screen.getByRole('button', { name: /Re-compress/i })
+    fireEvent.click(recompressBtn)
+    fireEvent.click(recompressBtn)
+    fireEvent.click(recompressBtn)
+
+    await screen.findByText('Compression complete')
+    // Crucial check: repeated compression never produces a stack of success toasts
+    expect(screen.getAllByText('Compression complete')).toHaveLength(1)
+
+    // Verify close button immediately dismisses the toast
+    const closeBtn = screen.getByRole('button', { name: /Dismiss notification/i })
+    fireEvent.click(closeBtn)
+    expect(screen.queryByText('Compression complete')).not.toBeInTheDocument()
+  })
+
+  it('debounces quality slider adjustments to prevent flooding notifications', async () => {
+    const compressSpy = vi.spyOn(imageLib, 'compressImage').mockImplementation(async (file, quality) => {
+      return {
+        blob: new Blob(['mock-data']),
+        url: 'blob:http://localhost/mock-compressed',
+        width: 800,
+        height: 600,
+        size: Math.round(file.size * (quality || 0.75)),
+      }
+    })
+
+    render(
+      <ToastProvider>
+        <ImageCompressor />
+      </ToastProvider>
+    )
+
+    const file = new File(['mock content'], 'sample.png', { type: 'image/png' })
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await screen.findByText('Compression complete')
+    expect(compressSpy).toHaveBeenCalledTimes(1)
+
+    // Close existing toast
+    const closeBtn = screen.getByRole('button', { name: /Dismiss notification/i })
+    fireEvent.click(closeBtn)
+    expect(screen.queryByText('Compression complete')).not.toBeInTheDocument()
+
+    // Multiple rapid slider adjustments
+    const slider = screen.getByLabelText(/Quality Factor/i)
+    fireEvent.change(slider, { target: { value: '60' } })
+    fireEvent.change(slider, { target: { value: '55' } })
+    fireEvent.change(slider, { target: { value: '50' } })
+
+    // During rapid slider movement, no new compression is triggered immediately
+    expect(compressSpy).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('Compression complete')).not.toBeInTheDocument()
+  })
+})
+
+
 

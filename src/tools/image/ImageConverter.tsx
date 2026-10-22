@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Download, RefreshCw, Check } from 'lucide-react'
 import { FileUploadZone } from '../../components/ui/FileUploadZone'
 import { Button } from '../../components/ui/Button'
@@ -16,24 +16,67 @@ export const ImageConverter: React.FC = () => {
   const [result, setResult] = useState<CompressResult | null>(null)
   const { showToast } = useToast()
 
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const activeRequestIdRef = useRef<number>(0)
+  const prevUrlRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+      if (prevUrlRef.current) {
+        URL.revokeObjectURL(prevUrlRef.current)
+      }
+    }
+  }, [])
+
   const handleConvert = async (
     fileToProcess?: File,
     fmt = targetFormat,
     q = quality,
-    bg = bgColor
+    bg = bgColor,
+    showToastNotification = true
   ) => {
     const file = fileToProcess || selectedFile
     if (!file) return
 
+    const requestId = ++activeRequestIdRef.current
     setIsProcessing(true)
+
     try {
       const res = await convertImage(file, fmt, q / 100, bg)
+
+      if (requestId !== activeRequestIdRef.current) {
+        URL.revokeObjectURL(res.url)
+        return
+      }
+
+      if (prevUrlRef.current && prevUrlRef.current !== res.url) {
+        URL.revokeObjectURL(prevUrlRef.current)
+      }
+      prevUrlRef.current = res.url
+
       setResult(res)
-      showToast('Conversion successful', `Converted to ${fmt.replace('image/', '').toUpperCase()}`)
+
+      if (showToastNotification) {
+        showToast(
+          'Conversion successful',
+          `Converted to ${fmt.replace('image/', '').toUpperCase()}`,
+          'success',
+          { id: 'image-converter-result' }
+        )
+      }
     } catch (err: unknown) {
-      showToast('Conversion failed', (err as Error).message, 'error')
+      if (requestId === activeRequestIdRef.current) {
+        showToast('Conversion failed', (err as Error).message, 'error', {
+          id: 'image-converter-error',
+        })
+      }
     } finally {
-      setIsProcessing(false)
+      if (requestId === activeRequestIdRef.current) {
+        setIsProcessing(false)
+      }
     }
   }
 
@@ -41,7 +84,7 @@ export const ImageConverter: React.FC = () => {
     if (files.length > 0) {
       const file = files[0]
       setSelectedFile(file)
-      handleConvert(file, targetFormat, quality, bgColor)
+      handleConvert(file, targetFormat, quality, bgColor, true)
     }
   }
 
@@ -53,7 +96,19 @@ export const ImageConverter: React.FC = () => {
     link.href = result.url
     link.download = `${originalName}.${ext}`
     link.click()
-    showToast('Download started', link.download)
+    showToast('Download started', link.download, 'info', { id: 'download-status' })
+  }
+
+  const handleReset = () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+    if (prevUrlRef.current) {
+      URL.revokeObjectURL(prevUrlRef.current)
+      prevUrlRef.current = null
+    }
+    setSelectedFile(null)
+    setResult(null)
   }
 
   return (
@@ -75,7 +130,10 @@ export const ImageConverter: React.FC = () => {
               onChange={(e) => {
                 const fmt = e.target.value as 'image/png' | 'image/jpeg' | 'image/webp'
                 setTargetFormat(fmt)
-                handleConvert(selectedFile, fmt, quality, bgColor)
+                if (debounceTimerRef.current) {
+                  clearTimeout(debounceTimerRef.current)
+                }
+                handleConvert(selectedFile, fmt, quality, bgColor, true)
               }}
               options={[
                 { label: 'WebP (Modern, compact)', value: 'image/webp' },
@@ -94,7 +152,12 @@ export const ImageConverter: React.FC = () => {
                 unit="%"
                 onChange={(q) => {
                   setQuality(q)
-                  handleConvert(selectedFile, targetFormat, q, bgColor)
+                  if (debounceTimerRef.current) {
+                    clearTimeout(debounceTimerRef.current)
+                  }
+                  debounceTimerRef.current = setTimeout(() => {
+                    handleConvert(selectedFile, targetFormat, q, bgColor, true)
+                  }, 300)
                 }}
               />
             ) : (
@@ -107,7 +170,12 @@ export const ImageConverter: React.FC = () => {
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <Button
                 variant="primary"
-                onClick={() => handleConvert(selectedFile, targetFormat, quality, bgColor)}
+                onClick={() => {
+                  if (debounceTimerRef.current) {
+                    clearTimeout(debounceTimerRef.current)
+                  }
+                  handleConvert(selectedFile, targetFormat, quality, bgColor, true)
+                }}
                 isLoading={isProcessing}
                 leftIcon={<RefreshCw className="w-4 h-4" />}
                 className="w-full sm:flex-1"
@@ -116,10 +184,7 @@ export const ImageConverter: React.FC = () => {
               </Button>
               <Button
                 variant="secondary"
-                onClick={() => {
-                  setSelectedFile(null)
-                  setResult(null)
-                }}
+                onClick={handleReset}
                 className="w-full sm:w-auto"
               >
                 Change

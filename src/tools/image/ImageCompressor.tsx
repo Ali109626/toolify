@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Download, RefreshCw, Check } from 'lucide-react'
 import { FileUploadZone } from '../../components/ui/FileUploadZone'
 import { Button } from '../../components/ui/Button'
@@ -15,19 +15,70 @@ export const ImageCompressor: React.FC = () => {
   const [result, setResult] = useState<CompressResult | null>(null)
   const { showToast } = useToast()
 
-  const handleProcess = async (fileToProcess?: File, qVal = quality, fmt = format) => {
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const activeRequestIdRef = useRef<number>(0)
+  const prevUrlRef = useRef<string | null>(null)
+
+  // Clean up debounce timer and blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+      if (prevUrlRef.current) {
+        URL.revokeObjectURL(prevUrlRef.current)
+      }
+    }
+  }, [])
+
+  const handleProcess = async (
+    fileToProcess?: File,
+    qVal = quality,
+    fmt = format,
+    showToastNotification = true
+  ) => {
     const file = fileToProcess || selectedFile
     if (!file) return
 
+    const requestId = ++activeRequestIdRef.current
     setIsProcessing(true)
+
     try {
       const res = await compressImage(file, qVal / 100, fmt)
+
+      // Prevent stale response from overriding newer request
+      if (requestId !== activeRequestIdRef.current) {
+        URL.revokeObjectURL(res.url)
+        return
+      }
+
+      // Revoke previous object URL to prevent memory leaks
+      if (prevUrlRef.current && prevUrlRef.current !== res.url) {
+        URL.revokeObjectURL(prevUrlRef.current)
+      }
+      prevUrlRef.current = res.url
+
       setResult(res)
-      showToast('Compression complete', `Saved ${Math.max(0, Math.round(((file.size - res.size) / file.size) * 100))}% file size`)
+
+      if (showToastNotification) {
+        const savings = Math.max(0, Math.round(((file.size - res.size) / file.size) * 100))
+        showToast(
+          'Compression complete',
+          `Saved ${savings}% file size`,
+          'success',
+          { id: 'image-compressor-result' }
+        )
+      }
     } catch (err: unknown) {
-      showToast('Compression failed', (err as Error).message, 'error')
+      if (requestId === activeRequestIdRef.current) {
+        showToast('Compression failed', (err as Error).message, 'error', {
+          id: 'image-compressor-error',
+        })
+      }
     } finally {
-      setIsProcessing(false)
+      if (requestId === activeRequestIdRef.current) {
+        setIsProcessing(false)
+      }
     }
   }
 
@@ -47,10 +98,17 @@ export const ImageCompressor: React.FC = () => {
     link.href = result.url
     link.download = `${originalName}_compressed.${ext}`
     link.click()
-    showToast('Download started', `Saving ${link.download}`)
+    showToast('Download started', `Saving ${link.download}`, 'info', { id: 'download-status' })
   }
 
   const handleReset = () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+    if (prevUrlRef.current) {
+      URL.revokeObjectURL(prevUrlRef.current)
+      prevUrlRef.current = null
+    }
     setSelectedFile(null)
     setResult(null)
   }
@@ -82,7 +140,12 @@ export const ImageCompressor: React.FC = () => {
               unit="%"
               onChange={(val) => {
                 setQuality(val)
-                handleProcess(selectedFile, val, format)
+                if (debounceTimerRef.current) {
+                  clearTimeout(debounceTimerRef.current)
+                }
+                debounceTimerRef.current = setTimeout(() => {
+                  handleProcess(selectedFile, val, format, true)
+                }, 300)
               }}
             />
 
@@ -92,7 +155,10 @@ export const ImageCompressor: React.FC = () => {
               onChange={(e) => {
                 const newFmt = e.target.value as 'image/jpeg' | 'image/webp'
                 setFormat(newFmt)
-                handleProcess(selectedFile, quality, newFmt)
+                if (debounceTimerRef.current) {
+                  clearTimeout(debounceTimerRef.current)
+                }
+                handleProcess(selectedFile, quality, newFmt, true)
               }}
               options={[
                 { label: 'JPEG (Best compatibility)', value: 'image/jpeg' },
@@ -103,7 +169,12 @@ export const ImageCompressor: React.FC = () => {
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <Button
                 variant="primary"
-                onClick={() => handleProcess(selectedFile, quality, format)}
+                onClick={() => {
+                  if (debounceTimerRef.current) {
+                    clearTimeout(debounceTimerRef.current)
+                  }
+                  handleProcess(selectedFile, quality, format, true)
+                }}
                 isLoading={isProcessing}
                 leftIcon={<RefreshCw className="w-4 h-4" />}
                 className="w-full sm:flex-1"
